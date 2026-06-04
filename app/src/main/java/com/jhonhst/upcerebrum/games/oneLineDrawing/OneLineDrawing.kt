@@ -60,9 +60,9 @@ fun OneLineDrawing(levelData: LevelData) {
 
     // ── TOLERANCIAS TÁCTILES ─────────────────────────────────────────────────
     // nodeStartTolerance: radio (en px) para detectar que el dedo tocó un nodo al empezar
-    val nodeStartTolerance = 200f
+    val nodeStartTolerance = 100f
     // lineDragTolerance: distancia máxima que puede alejarse el dedo de una línea mientras arrastra
-    val lineDragTolerance = 300f
+    val lineDragTolerance = 500f
 
     // ── AUTO-REINICIO ─────────────────────────────────────────────────────────
     // Este bloque se ejecuta cada vez que 'gameState' cambia.
@@ -135,46 +135,50 @@ fun OneLineDrawing(levelData: LevelData) {
                             .first { it.id == currentNodeId }
                             .toOffset(width, height)
 
-                        // Filtramos las aristas que conectan con el nodo actual
+                        // ── NUEVO ENFOQUE: IDENTIFICAR EL NODO DE RETROCESO ──
+                        // Revisamos cuál fue la última línea dibujada para saber de dónde venimos
+                        val retreatNodeId = drawnEdges.lastOrNull()?.let { lastEdge ->
+                            if (lastEdge.nodeA == currentNodeId) lastEdge.nodeB else lastEdge.nodeA
+                        }
+
+                        // Filtramos TODAS las aristas que conectan con el nodo actual
                         val validEdges = levelData.edges.filter {
                             it.nodeA == currentNodeId || it.nodeB == currentNodeId
                         }
 
-                        // De esas aristas, obtenemos los IDs de vecinos que AÚN NO fueron visitados
-                        val unvisitedNeighbors = validEdges
+                        // VECINOS EVALUABLES: Los nodos a los que aún no hemos ido + el nodo del que venimos
+                        val evaluableNeighbors = validEdges
                             .map { if (it.nodeA == currentNodeId) it.nodeB else it.nodeA }
-                            .filter { neighborId -> !hasEdge(drawnEdges, currentNodeId!!, neighborId) }
+                            .filter { neighborId ->
+                                !hasEdge(drawnEdges, currentNodeId!!, neighborId) || neighborId == retreatNodeId
+                            }
 
                         // Variables para encontrar el mejor candidato hacia donde apunta el dedo
                         var bestNeighbor: Int? = null
                         var bestProg = 0f
                         var minDist = Float.MAX_VALUE
 
-                        // Recorremos cada vecino no visitado y calculamos si el dedo apunta hacia él
-                        for (neighborId in unvisitedNeighbors) {
+                        // Recorremos cada vecino evaluable y calculamos si el dedo apunta hacia él
+                        for (neighborId in evaluableNeighbors) {
                             val targetOffset: Offset = levelData.nodes
                                 .first { it.id == neighborId }
                                 .toOffset(width, height)
 
-                            // Vector de la línea (desde el nodo actual hasta el vecino)
+                            // Vector de la línea y Vector del dedo
                             val lineVec: Offset = targetOffset - currentOffset
-                            // Vector del dedo (desde el nodo actual hasta donde está el dedo)
                             val touchVec: Offset = currentPos - currentOffset
 
                             val lineLenSq: Float = lineVec.x * lineVec.x + lineVec.y * lineVec.y
                             if (lineLenSq > 0f) {
-                                // 't' es la proyección del dedo sobre la línea (producto punto normalizado)
-                                // t=0 → el dedo está en el nodo actual; t=1 → el dedo está en el vecino
+                                // 't' es la proyección del dedo sobre la línea
                                 val t: Float = (touchVec.x * lineVec.x + touchVec.y * lineVec.y) / lineLenSq
-                                val clampedT: Float = t.coerceIn(0f, 1f) // Lo limitamos entre 0 y 1
+                                val clampedT: Float = t.coerceIn(0f, 1f)
 
                                 // Punto más cercano sobre la línea al dedo actual
                                 val projection: Offset = currentOffset + (lineVec * clampedT)
-
-                                // Distancia real del dedo a la línea
                                 val distToLine: Float = (currentPos - projection).getDistance()
 
-                                // Si el dedo está dentro de la tolerancia y es el más cercano hasta ahora
+                                // Si el dedo está en tolerancia Y es la línea más cercana hasta ahora
                                 if (distToLine < lineDragTolerance && distToLine < minDist) {
                                     minDist = distToLine
                                     bestNeighbor = neighborId
@@ -184,15 +188,28 @@ fun OneLineDrawing(levelData: LevelData) {
                         }
 
                         if (bestNeighbor != null) {
-                            // El dedo está apuntando hacia 'bestNeighbor', actualizamos la animación parcial
+
+                            // ── LÓGICA DE DESHACER (RETROCEDER) EXACTA ──
+                            // Si la línea ganadora es por la que venimos Y avanzamos 50% hacia atrás
+                            if (bestNeighbor == retreatNodeId && bestProg > 0.50f) {
+                                drawnEdges = drawnEdges.dropLast(1) // Borramos la última línea completada
+                                val oldCurrentId = currentNodeId!!
+                                currentNodeId = retreatNodeId       // Nos paramos en el nodo anterior
+
+                                // Invertimos la animación para que el retroceso sea 100% fluido
+                                activeTargetId = oldCurrentId
+                                activeProgress = 1f - bestProg
+                                return@detectDragGestures // Terminamos por este frame
+                            }
+
+                            // ── LÓGICA DE AVANCE NORMAL ──
                             activeTargetId = bestNeighbor
                             activeProgress = bestProg
 
                             // Si el progreso supera el 90%, consideramos que llegó al nodo destino
                             if (bestProg > 0.90f) {
-                                // Confirmamos la arista como dibujada
                                 drawnEdges = drawnEdges + GameEdge(currentNodeId!!, bestNeighbor)
-                                currentNodeId = bestNeighbor // El lápiz avanza al nuevo nodo
+                                currentNodeId = bestNeighbor
                                 activeTargetId = null
                                 activeProgress = 0f
 

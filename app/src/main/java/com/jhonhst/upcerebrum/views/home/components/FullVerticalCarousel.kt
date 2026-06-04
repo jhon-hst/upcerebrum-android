@@ -122,7 +122,7 @@ fun FullVerticalCarousel() {
             contentAlignment = Alignment.Center // Centra el contenido en la pantalla
         ) {
             // El texto que solicitaste
-            OneLineDrawing(levelChristmasTree)
+            OneLineDrawing(levelHouse)
         }
     }
 }
