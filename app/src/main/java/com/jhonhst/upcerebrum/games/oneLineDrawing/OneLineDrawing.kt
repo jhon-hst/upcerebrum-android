@@ -1,5 +1,6 @@
 package com.jhonhst.upcerebrum.games.oneLineDrawing
 
+// Los imports SIEMPRE van aquí arriba, justo después del package
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -10,41 +11,66 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.delay // Necesario para el delay del auto-reinicio
+import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
-// 1. ADIÓS STRINGS HARDCODEADOS: Definimos un Enum formal para los estados
+// ─── ESTADO DEL JUEGO ────────────────────────────────────────────────────────
+// Enum formal para los estados del juego, en vez de usar Strings sueltos como "won" o "lost".
+// Así el compilador nos avisa si escribimos mal un estado.
 enum class GameState {
-    IDLE, PLAYING, WON, LOST
+    IDLE,    // El jugador no ha empezado a trazar aún
+    PLAYING, // El jugador está arrastrando el dedo actualmente
+    WON,     // Dibujó todas las líneas sin repetir → ganó
+    LOST     // Levantó el dedo a mitad del camino, o se quedó bloqueado → perdió
 }
 
-// Función auxiliar para saber si una línea ya fue dibujada
+// ─── FUNCIÓN AUXILIAR ────────────────────────────────────────────────────────
+// Comprueba si una arista entre el nodo 'a' y el nodo 'b' ya fue dibujada.
+// Funciona en ambas direcciones: (1→2) es lo mismo que (2→1).
 fun hasEdge(edges: List<GameEdge>, a: Int, b: Int): Boolean {
     return edges.any { (it.nodeA == a && it.nodeB == b) || (it.nodeA == b && it.nodeB == a) }
 }
 
 @Composable
 fun OneLineDrawing(levelData: LevelData) {
-    // Estados principales
+
+    // ── ESTADOS PRINCIPALES ──────────────────────────────────────────────────
+
+    // Lista de aristas que el jugador ya trazó con éxito
     var drawnEdges by remember { mutableStateOf<List<GameEdge>>(emptyList()) }
+
+    // ID del nodo donde está parado el "lápiz" en este momento
     var currentNodeId by remember { mutableStateOf<Int?>(null) }
 
-    // Estados de animación táctil
+    // ── ESTADOS DE ANIMACIÓN TÁCTIL ──────────────────────────────────────────
+
+    // ID del nodo al que el jugador está apuntando (pero aún no llega)
     var activeTargetId by remember { mutableStateOf<Int?>(null) }
+
+    // Qué tan avanzado va el trazo hacia el nodo destino (0.0 = inicio, 1.0 = llegó)
     var activeProgress by remember { mutableFloatStateOf(0f) }
 
-    // Usamos el Enum en lugar de Strings
+    // ── ESTADO GENERAL Y FEEDBACK VISUAL ─────────────────────────────────────
+
+    // Estado actual de la partida (ver enum arriba)
     var gameState by remember { mutableStateOf(GameState.IDLE) }
+
+    // Posición en pantalla donde el jugador falló (para dibujar la X roja)
     var failurePoint by remember { mutableStateOf<Offset?>(null) }
 
-    // Tolerancias táctiles ajustables (aumentadas a petición)
-    val nodeStartTolerance = 200f // Qué tan lejos puedes tocar el inicio
-    val lineDragTolerance = 300f  // Qué tan lejos puede estar el dedo de la línea mientras arrastra
+    // ── TOLERANCIAS TÁCTILES ─────────────────────────────────────────────────
+    // nodeStartTolerance: radio (en px) para detectar que el dedo tocó un nodo al empezar
+    val nodeStartTolerance = 200f
+    // lineDragTolerance: distancia máxima que puede alejarse el dedo de una línea mientras arrastra
+    val lineDragTolerance = 300f
 
-    // 2. AUTO-REINICIO: Si el estado cambia a LOST, esperamos 1 seg y reseteamos
+    // ── AUTO-REINICIO ─────────────────────────────────────────────────────────
+    // Este bloque se ejecuta cada vez que 'gameState' cambia.
+    // Si el nuevo estado es LOST, esperamos 1 segundo y luego reseteamos todo.
     LaunchedEffect(gameState) {
         if (gameState == GameState.LOST) {
-            delay(1000L.milliseconds) // Espera 1 segundo exacto
+            delay(1000L.milliseconds) // Espera 1 segundo para que el jugador vea la X roja
+            // Reseteo completo del juego
             gameState = GameState.IDLE
             drawnEdges = emptyList()
             activeTargetId = null
@@ -54,63 +80,101 @@ fun OneLineDrawing(levelData: LevelData) {
         }
     }
 
+    // ── CANVAS PRINCIPAL ──────────────────────────────────────────────────────
+    // Canvas es el componente de Compose donde dibujamos todo con primitivas (líneas, círculos, etc.)
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF243447))
-            .pointerInput(levelData) {
+            .background(Color(0xFF243447)) // Fondo azul oscuro del tablero
+            .pointerInput(levelData) {     // pointerInput detecta gestos táctiles; se reinicia si cambia levelData
                 detectDragGestures(
+
+                    // ── INICIO DEL ARRASTRE ───────────────────────────────────
+                    // Se llama una sola vez cuando el jugador pone el dedo en la pantalla
                     onDragStart = { startOffset ->
+
+                        // Si ya ganó o está en medio del auto-reinicio, ignoramos el toque
                         if (gameState == GameState.WON || gameState == GameState.LOST) return@detectDragGestures
 
-                        gameState = GameState.IDLE
-                        drawnEdges = emptyList()
-                        activeTargetId = null
-                        activeProgress = 0f
-                        failurePoint = null
+                        // size.width y size.height son Float dentro de pointerInput → tipos correctos
+                        val width: Float = size.width.toFloat()
+                        val height: Float = size.height.toFloat()
 
-                        val width = size.width
-                        val height = size.height
-
-                        val startNode = levelData.nodes.find {
-                            (Offset(it.x * width, it.y * height) - startOffset).getDistance() < nodeStartTolerance
+                        // Buscamos si el dedo tocó cerca de algún nodo del nivel
+                        val startNode = levelData.nodes.find { node ->
+                            (node.toOffset(width, height) - startOffset).getDistance() < nodeStartTolerance
                         }
 
+                        // ✅ FIX: Solo reseteamos y empezamos si el toque fue sobre un nodo válido.
+                        // Antes el reset ocurría siempre, borrando el progreso aunque el dedo
+                        // cayera en el vacío. Ahora el reset queda aquí adentro.
                         if (startNode != null) {
+                            drawnEdges = emptyList()
+                            activeTargetId = null
+                            activeProgress = 0f
+                            failurePoint = null
                             currentNodeId = startNode.id
                             gameState = GameState.PLAYING
                         }
                     },
+
+                    // ── DURANTE EL ARRASTRE ───────────────────────────────────
+                    // Se llama continuamente mientras el dedo se mueve por la pantalla
                     onDrag = { change, _ ->
+
+                        // Si no estamos jugando o no hay nodo activo, ignoramos el movimiento
                         if (gameState != GameState.PLAYING || currentNodeId == null) return@detectDragGestures
 
-                        val width = size.width
-                        val height = size.height
-                        val currentPos = change.position
+                        // size.width y size.height son Float dentro de pointerInput → tipos correctos
+                        val width: Float = size.width.toFloat()
+                        val height: Float = size.height.toFloat()
+                        val currentPos: Offset = change.position // Posición actual del dedo en pantalla
 
-                        val currentOffset = levelData.nodes.first { it.id == currentNodeId }.let { Offset(it.x * width, it.y * height) }
+                        // Posición en pantalla del nodo donde está parado el lápiz
+                        val currentOffset: Offset = levelData.nodes
+                            .first { it.id == currentNodeId }
+                            .toOffset(width, height)
 
-                        val validEdges = levelData.edges.filter { it.nodeA == currentNodeId || it.nodeB == currentNodeId }
-                        val unvisitedNeighbors = validEdges.map { if (it.nodeA == currentNodeId) it.nodeB else it.nodeA }
+                        // Filtramos las aristas que conectan con el nodo actual
+                        val validEdges = levelData.edges.filter {
+                            it.nodeA == currentNodeId || it.nodeB == currentNodeId
+                        }
+
+                        // De esas aristas, obtenemos los IDs de vecinos que AÚN NO fueron visitados
+                        val unvisitedNeighbors = validEdges
+                            .map { if (it.nodeA == currentNodeId) it.nodeB else it.nodeA }
                             .filter { neighborId -> !hasEdge(drawnEdges, currentNodeId!!, neighborId) }
 
+                        // Variables para encontrar el mejor candidato hacia donde apunta el dedo
                         var bestNeighbor: Int? = null
                         var bestProg = 0f
                         var minDist = Float.MAX_VALUE
 
+                        // Recorremos cada vecino no visitado y calculamos si el dedo apunta hacia él
                         for (neighborId in unvisitedNeighbors) {
-                            val targetOffset = levelData.nodes.first { it.id == neighborId }.let { Offset(it.x * width, it.y * height) }
-                            val lineVec = targetOffset - currentOffset
-                            val touchVec = currentPos - currentOffset
+                            val targetOffset: Offset = levelData.nodes
+                                .first { it.id == neighborId }
+                                .toOffset(width, height)
 
-                            val lineLenSq = lineVec.x * lineVec.x + lineVec.y * lineVec.y
-                            if (lineLenSq > 0) {
-                                val t = (touchVec.x * lineVec.x + touchVec.y * lineVec.y) / lineLenSq
-                                val clampedT = t.coerceIn(0f, 1f)
-                                val projection = currentOffset + (lineVec * clampedT)
-                                val distToLine = (currentPos - projection).getDistance()
+                            // Vector de la línea (desde el nodo actual hasta el vecino)
+                            val lineVec: Offset = targetOffset - currentOffset
+                            // Vector del dedo (desde el nodo actual hasta donde está el dedo)
+                            val touchVec: Offset = currentPos - currentOffset
 
-                                // 3. MAYOR TOLERANCIA: Permite al usuario alejar el dedo bastante
+                            val lineLenSq: Float = lineVec.x * lineVec.x + lineVec.y * lineVec.y
+                            if (lineLenSq > 0f) {
+                                // 't' es la proyección del dedo sobre la línea (producto punto normalizado)
+                                // t=0 → el dedo está en el nodo actual; t=1 → el dedo está en el vecino
+                                val t: Float = (touchVec.x * lineVec.x + touchVec.y * lineVec.y) / lineLenSq
+                                val clampedT: Float = t.coerceIn(0f, 1f) // Lo limitamos entre 0 y 1
+
+                                // Punto más cercano sobre la línea al dedo actual
+                                val projection: Offset = currentOffset + (lineVec * clampedT)
+
+                                // Distancia real del dedo a la línea
+                                val distToLine: Float = (currentPos - projection).getDistance()
+
+                                // Si el dedo está dentro de la tolerancia y es el más cercano hasta ahora
                                 if (distToLine < lineDragTolerance && distToLine < minDist) {
                                     minDist = distToLine
                                     bestNeighbor = neighborId
@@ -120,95 +184,133 @@ fun OneLineDrawing(levelData: LevelData) {
                         }
 
                         if (bestNeighbor != null) {
+                            // El dedo está apuntando hacia 'bestNeighbor', actualizamos la animación parcial
                             activeTargetId = bestNeighbor
                             activeProgress = bestProg
 
+                            // Si el progreso supera el 90%, consideramos que llegó al nodo destino
                             if (bestProg > 0.90f) {
+                                // Confirmamos la arista como dibujada
                                 drawnEdges = drawnEdges + GameEdge(currentNodeId!!, bestNeighbor)
-                                currentNodeId = bestNeighbor
+                                currentNodeId = bestNeighbor // El lápiz avanza al nuevo nodo
                                 activeTargetId = null
                                 activeProgress = 0f
 
+                                // ¿Dibujó todas las aristas del nivel? → GANÓ
                                 if (drawnEdges.size == levelData.edges.size) {
                                     gameState = GameState.WON
                                 } else {
-                                    val nextValidEdges = levelData.edges.filter { it.nodeA == currentNodeId || it.nodeB == currentNodeId }
+                                    // Revisamos si desde el nuevo nodo quedan aristas disponibles
+                                    val nextValidEdges = levelData.edges.filter {
+                                        it.nodeA == currentNodeId || it.nodeB == currentNodeId
+                                    }
                                     val nextUnvisited = nextValidEdges.filter { edge ->
                                         !hasEdge(drawnEdges, edge.nodeA, edge.nodeB)
                                     }
 
+                                    // Si no hay vecinos sin visitar → BLOQUEADO → perdió
                                     if (nextUnvisited.isEmpty()) {
                                         gameState = GameState.LOST
-                                        failurePoint = levelData.nodes.first { it.id == currentNodeId }.let { Offset(it.x * width, it.y * height) }
+                                        failurePoint = levelData.nodes
+                                            .first { it.id == currentNodeId }
+                                            .toOffset(width, height)
                                     }
                                 }
                             }
                         } else {
+                            // El dedo no apunta a ninguna línea válida → limpiamos el preview
                             activeTargetId = null
                             activeProgress = 0f
                         }
                     },
+
+                    // ── FIN DEL ARRASTRE ──────────────────────────────────────
+                    // Se llama cuando el jugador levanta el dedo
                     onDragEnd = {
+                        // Si levantó el dedo sin terminar el dibujo → PERDIÓ
                         if (gameState == GameState.PLAYING) {
                             gameState = GameState.LOST
-                            val width = size.width
-                            val height = size.height
 
+                            // size.width y size.height son Float dentro de pointerInput → tipos correctos
+                            val width: Float = size.width.toFloat()
+                            val height: Float = size.height.toFloat()
+
+                            // Calculamos dónde mostrar la X roja de fallo
                             if (activeTargetId != null && currentNodeId != null) {
-                                val currentOffset = levelData.nodes.first { it.id == currentNodeId }.let { Offset(it.x * width, it.y * height) }
-                                val targetOffset = levelData.nodes.first { it.id == activeTargetId }.let { Offset(it.x * width, it.y * height) }
-                                val lineVec = targetOffset - currentOffset
+                                // Si estaba a mitad de una línea, la X va en ese punto intermedio
+                                val currentOffset = levelData.nodes
+                                    .first { it.id == currentNodeId }
+                                    .toOffset(width, height)
+                                val targetOffset = levelData.nodes
+                                    .first { it.id == activeTargetId }
+                                    .toOffset(width, height)
+                                val lineVec: Offset = targetOffset - currentOffset
                                 failurePoint = currentOffset + (lineVec * activeProgress)
                             } else if (currentNodeId != null) {
-                                failurePoint = levelData.nodes.first { it.id == currentNodeId }.let { Offset(it.x * width, it.y * height) }
+                                // Si no estaba arrastrando hacia ningún vecino, la X va en el nodo actual
+                                failurePoint = levelData.nodes
+                                    .first { it.id == currentNodeId }
+                                    .toOffset(width, height)
                             }
                         }
                     }
                 )
             }
     ) {
-        val width = size.width
-        val height = size.height
-        val strokeW = 32f
+        // ── BLOQUE DE DIBUJO ─────────────────────────────────────────────────
+        // Todo lo que está aquí dentro se redibufa cada vez que cambia un estado.
+        // Dentro del bloque Canvas { } size.width y size.height son Float directamente.
+        val width: Float = size.width
+        val height: Float = size.height
+        val strokeW = 32f // Grosor de las líneas en píxeles
 
-        val baseLineColor = Color(0xFF4A6B8A)
-        val successColor = Color(0xFF4ADE80)
-        val failColor = Color(0xFFFF6B6B)
-        val playingColor = Color(0xFF60A5FA)
+        // Paleta de colores
+        val baseLineColor = Color(0xFF4A6B8A)  // Azul grisáceo: líneas aún no dibujadas
+        val successColor  = Color(0xFF4ADE80)  // Verde: camino al ganar
+        val failColor     = Color(0xFFFF6B6B)  // Rojo coral: camino al perder
+        val playingColor  = Color(0xFF60A5FA)  // Azul claro: camino mientras juegas
 
-        // Usamos el Enum para determinar el color de la ruta
+        // Elegimos el color del trazo según el estado actual del juego
         val activePathColor = when (gameState) {
-            GameState.WON -> successColor
+            GameState.WON  -> successColor
             GameState.LOST -> failColor
-            else -> playingColor
+            else           -> playingColor
         }
 
+        // ── PASO 1: Dibujar todas las líneas base (el esqueleto del nivel) ───
         levelData.edges.forEach { edge ->
-            val a = levelData.nodes.first { it.id == edge.nodeA }
-            val b = levelData.nodes.first { it.id == edge.nodeB }
-            drawLine(baseLineColor, Offset(a.x*width, a.y*height), Offset(b.x*width, b.y*height), strokeW, StrokeCap.Round)
+            val a: Offset = levelData.nodes.first { it.id == edge.nodeA }.toOffset(width, height)
+            val b: Offset = levelData.nodes.first { it.id == edge.nodeB }.toOffset(width, height)
+            drawLine(baseLineColor, a, b, strokeW, StrokeCap.Round)
         }
 
+        // ── PASO 2: Dibujar las aristas que el jugador ya completó ───────────
         drawnEdges.forEach { edge ->
-            val a = levelData.nodes.first { it.id == edge.nodeA }
-            val b = levelData.nodes.first { it.id == edge.nodeB }
-            drawLine(activePathColor, Offset(a.x*width, a.y*height), Offset(b.x*width, b.y*height), strokeW, StrokeCap.Round)
+            val a: Offset = levelData.nodes.first { it.id == edge.nodeA }.toOffset(width, height)
+            val b: Offset = levelData.nodes.first { it.id == edge.nodeB }.toOffset(width, height)
+            drawLine(activePathColor, a, b, strokeW, StrokeCap.Round)
         }
 
+        // ── PASO 3: Dibujar el trazo parcial (animación en tiempo real) ──────
+        // Solo se muestra mientras el jugador está arrastrando hacia un vecino
         if (gameState == GameState.PLAYING && currentNodeId != null && activeTargetId != null && activeProgress > 0f) {
-            val a = levelData.nodes.first { it.id == currentNodeId }
-            val b = levelData.nodes.first { it.id == activeTargetId }
-            val start = Offset(a.x*width, a.y*height)
-            val end = Offset(b.x*width, b.y*height)
+            val a: Offset = levelData.nodes.first { it.id == currentNodeId }.toOffset(width, height)
+            val b: Offset = levelData.nodes.first { it.id == activeTargetId }.toOffset(width, height)
 
-            val currentFill = start + ((end - start) * activeProgress)
-            drawLine(playingColor, start, currentFill, strokeW, StrokeCap.Round)
+            // Calculamos el punto hasta donde llega el trazo según el progreso (0.0 a 1.0)
+            val partialEnd: Offset = a + ((b - a) * activeProgress)
+            drawLine(playingColor, a, partialEnd, strokeW, StrokeCap.Round)
         }
 
+        // ── PASO 4: Dibujar la X roja de fallo ───────────────────────────────
+        // Se muestra durante 1 segundo (hasta que el LaunchedEffect resetea)
         if (gameState == GameState.LOST && failurePoint != null) {
+            // Círculo rojo de fondo
             drawCircle(failColor, radius = 56f, center = failurePoint!!)
-            drawLine(Color.White, failurePoint!! + Offset(-22f,-22f), failurePoint!! + Offset(22f,22f), 14f, StrokeCap.Round)
-            drawLine(Color.White, failurePoint!! + Offset(-22f,22f), failurePoint!! + Offset(22f,-22f), 14f, StrokeCap.Round)
+            // Trazo diagonal ↘
+            drawLine(Color.White, failurePoint!! + Offset(-22f, -22f), failurePoint!! + Offset(22f, 22f), 14f, StrokeCap.Round)
+            // Trazo diagonal ↙
+            drawLine(Color.White, failurePoint!! + Offset(-22f, 22f), failurePoint!! + Offset(22f, -22f), 14f, StrokeCap.Round)
         }
     }
 }
