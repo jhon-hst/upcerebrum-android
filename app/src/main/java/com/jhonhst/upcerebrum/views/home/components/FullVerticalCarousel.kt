@@ -5,12 +5,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.jhonhst.upcerebrum.games.flowConnect.Dot
+import com.jhonhst.upcerebrum.games.flowConnect.FlowConnect
+import com.jhonhst.upcerebrum.games.flowConnect.FlowLevelData
+import com.jhonhst.upcerebrum.games.flowConnect.GridPoint
+
 import com.jhonhst.upcerebrum.games.oneLineDrawing.GameEdge
 import com.jhonhst.upcerebrum.games.oneLineDrawing.GameNode
 import com.jhonhst.upcerebrum.games.oneLineDrawing.LevelData
@@ -107,10 +111,38 @@ fun FullVerticalCarousel() {
         )
     )
 
+    val flowLevel1 = FlowLevelData(
+        columns = 5,
+        rows = 5,
+        dots = listOf(
+            // Puntos Verdes (ID 1)
+            Dot(GridPoint(0, 1), 1, Color(0xFF10B981)), // Verde
+            Dot(GridPoint(3, 3), 1, Color(0xFF10B981)),
+
+            // Puntos Naranjas (ID 2)
+            Dot(GridPoint(0, 2), 2, Color(0xFFF59E0B)), // Naranja
+            Dot(GridPoint(1, 2), 2, Color(0xFFF59E0B)),
+
+            // Puntos Rosas (ID 3)
+            Dot(GridPoint(2, 1), 3, Color(0xFFEC4899)), // Rosa
+            Dot(GridPoint(3, 1), 3, Color(0xFFEC4899)),
+
+            // Puntos Rojos (ID 4)
+            Dot(GridPoint(0, 3), 4, Color(0xFFEF4444)), // Rojo
+            Dot(GridPoint(2, 3), 4, Color(0xFFEF4444)),
+
+            // Puntos Azules (ID 5)
+            Dot(GridPoint(1, 4), 5, Color(0xFF3B82F6)), // Azul
+            Dot(GridPoint(4, 3), 5, Color(0xFF3B82F6))
+        )
+    )
+
+
     // 3. VerticalPager maneja el scroll estilo TikTok automáticamente
     VerticalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize() // Asegura que el carrusel tome toda la pantalla
+        modifier = Modifier.fillMaxSize() ,// Asegura que el carrusel tome toda la pantalla
+        userScrollEnabled = false
     ) { page ->
 
         // 4. Contenido de cada pantalla individual
@@ -122,7 +154,11 @@ fun FullVerticalCarousel() {
             contentAlignment = Alignment.Center // Centra el contenido en la pantalla
         ) {
             // El texto que solicitaste
-            OneLineDrawing(levelHouse)
+            //OneLineDrawing(levelHouse)
+
+            //BallSort() // Tubo 3 se verá seleccionado
+
+            FlowConnect(flowLevel1)
         }
     }
 }
