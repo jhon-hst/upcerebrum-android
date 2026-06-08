@@ -1,14 +1,32 @@
 estilos
     colores
     fuentes
-Crear github repo
 pagina de settings
-pagina de profile
-pagina para iniciar sesión
-Juegos
-    - dibujar las lineas
-    - acomodar las peloticas
-    - agregar sonidos y vibraciones al ganar o perder
+
+
+ agregar sonidos y vibraciones al ganar o perder
+
+
+crear varios juegos
+agregar boton de siguiente verde cuando se gana
+solo se pasa al siguiente cuando se gana
+
+fondo del juego
+definir los colores de la app
+background de los juegos
+
+Agregar room para saber los juegos ganados
+obtener os juegos desde algun api
+
+definir la estructura MVVM
+texto multilanguage
+
+---- WISH -----
+boton de pista
+como funciona
+modal para agregar las estrellitas en la tienda
 Crear firabase account
 Crear firebase login
+pagina de profile
+pagina para iniciar sesión
 

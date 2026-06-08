@@ -154,11 +154,11 @@ fun FullVerticalCarousel() {
             contentAlignment = Alignment.Center // Centra el contenido en la pantalla
         ) {
             // El texto que solicitaste
-            //OneLineDrawing(levelHouse)
+            OneLineDrawing(levelHouse)
 
             //BallSort() // Tubo 3 se verá seleccionado
 
-            FlowConnect(flowLevel1)
+            //FlowConnect(flowLevel1)
         }
     }
 }
