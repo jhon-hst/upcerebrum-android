@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">UpCerebrum</string>
+
+    <!-- Bottom Navigation Labels -->
+    <string name="nav_home">Home</string>
+    <string name="nav_path">Path</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- General Titles -->
+    <string name="welcome_message">Welcome to your training!</string>
+</resources>

@@ -1,3 +1,11 @@
 <resources>
-    <string name="app_name">upcerebrum</string>
+    <string name="app_name">UpCerebrum</string>
+
+    <!-- Bottom Navigation Labels -->
+    <string name="nav_home">Inicio</string>
+    <string name="nav_path">Camino</string>
+    <string name="nav_settings">Ajustes</string>
+
+    <!-- General Titles -->
+    <string name="welcome_message">¡Bienvenido a tu entrenamiento!</string>
 </resources>

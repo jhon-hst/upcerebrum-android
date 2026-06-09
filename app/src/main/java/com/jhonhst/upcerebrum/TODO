@@ -1,6 +1,11 @@
 estilos
-    colores
-    fuentes
+    colores ✅
+    fuentes ✅
+
+definir la estructura MVVM
+texto multilanguage
+
+
 pagina de settings
 
 
@@ -18,8 +23,7 @@ background de los juegos
 Agregar room para saber los juegos ganados
 obtener os juegos desde algun api
 
-definir la estructura MVVM
-texto multilanguage
+
 
 ---- WISH -----
 boton de pista

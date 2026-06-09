@@ -1,5 +1,6 @@
 package com.jhonhst.upcerebrum.navigation
 
+import com.jhonhst.upcerebrum.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -23,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -34,14 +36,14 @@ import com.jhonhst.upcerebrum.ui.theme.TextSecondary
 
 private data class NavItem(
     val route: Route,
-    val label: String,
+    val label: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
 private val items = listOf(
-    NavItem(Route.Home,     "Home",     Icons.Outlined.Home),
-    NavItem(Route.Path,     "Path",     Icons.Outlined.Route),
-    NavItem(Route.Settings, "Settings", Icons.Outlined.Settings),
+    NavItem(Route.Home,     R.string.nav_home,     Icons.Outlined.Home),
+    NavItem(Route.Path,     R.string.nav_path,     Icons.Outlined.Route),
+    NavItem(Route.Settings, R.string.nav_settings, Icons.Outlined.Settings),
 )
 
 @Composable
@@ -63,6 +65,7 @@ fun BottomNavBar(navController: NavController) {
         ) {
             items.forEachIndexed { index, item ->
                 val selected = currentDest?.hasRoute(item.route::class) == true
+                val translatedLabel = stringResource(id = item.label)
 
                 Row(
                     modifier = Modifier.weight(1f),
@@ -79,8 +82,8 @@ fun BottomNavBar(navController: NavController) {
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label, style = MaterialTheme.typography.bodyLarge) },
+                        icon = { Icon(item.icon, contentDescription = translatedLabel) },
+                        label = { Text(translatedLabel, style = MaterialTheme.typography.bodyLarge) },
                         colors = NavigationBarItemDefaults.colors(
                             // Cuando está activo: Icono y texto se pintan con tu color secundario (AreaGreen)
                             selectedIconColor = AreaGreen,
