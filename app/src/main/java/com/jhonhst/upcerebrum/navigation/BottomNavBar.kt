@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -79,7 +80,7 @@ fun BottomNavBar(navController: NavController) {
                             }
                         },
                         icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label) },
+                        label = { Text(item.label, style = MaterialTheme.typography.bodyLarge) },
                         colors = NavigationBarItemDefaults.colors(
                             // Cuando está activo: Icono y texto se pintan con tu color secundario (AreaGreen)
                             selectedIconColor = AreaGreen,
